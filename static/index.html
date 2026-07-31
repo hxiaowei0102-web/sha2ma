@@ -61,7 +61,11 @@ body { background: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, 'Seg
 
 <div class="header">
   <h1>福彩3D 百十个位各杀两码</h1>
-  <div class="sub">6算法异构系统 · 云端全自动 · 3重数据源</div>
+  <div class="sub">云端全自动 · 6层数据源 · 双模型</div>
+  <div style="display:flex;gap:6px;margin-top:8px">
+    <button id="btnV3" onclick="switchModel('V3')" style="flex:1;padding:5px;border-radius:16px;border:1.5px solid rgba(255,255,255,.5);background:rgba(255,255,255,.2);color:#fff;font-size:.75rem;font-weight:700;cursor:pointer" class="active">⚡ V3 冲刺</button>
+    <button id="btnV5" onclick="switchModel('V5')" style="flex:1;padding:5px;border-radius:16px;border:1.5px solid rgba(255,255,255,.5);background:transparent;color:rgba(255,255,255,.7);font-size:.75rem;cursor:pointer">🛡 V5 稳定</button>
+  </div>
 </div>
 
 <div class="banner" id="banner">
@@ -123,23 +127,30 @@ body { background: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, 'Seg
 </div>
 
 <script>
+let currentModel = 'V3';
+
+function switchModel(m) {
+  currentModel = m;
+  document.getElementById('btnV3').classList.toggle('active', m==='V3');
+  document.getElementById('btnV5').classList.toggle('active', m==='V5');
+  load();
+}
+
 async function load() {
   try {
     const p = await fetch('predict.json').then(r => r.json());
+    const m = p.models[currentModel];
     document.getElementById('predIssue').textContent = p.next_issue;
     document.getElementById('lastInfo').textContent = `上期 ${p.last_issue} = ${p.last_draw}`;
-    document.getElementById('updateTime').textContent = `更新 ${p.updated}`;
-    document.getElementById('kh1').textContent = p.kills.h[0];
-    document.getElementById('kh2').textContent = p.kills.h[1];
-    document.getElementById('kt1').textContent = p.kills.t[0];
-    document.getElementById('kt2').textContent = p.kills.t[1];
-    document.getElementById('ko1').textContent = p.kills.o[0];
-    document.getElementById('ko2').textContent = p.kills.o[1];
-  } catch(e) { console.error(e); }
+    document.getElementById('updateTime').textContent = `更新 ${p.updated} [${currentModel}]`;
+    document.getElementById('kh1').textContent = m.kills.h[0];
+    document.getElementById('kh2').textContent = m.kills.h[1];
+    document.getElementById('kt1').textContent = m.kills.t[0];
+    document.getElementById('kt2').textContent = m.kills.t[1];
+    document.getElementById('ko1').textContent = m.kills.o[0];
+    document.getElementById('ko2').textContent = m.kills.o[1];
 
-  try {
-    const bt = await fetch('backtest.json').then(r => r.json());
-    const s = bt.summary;
+    const s = m.summary;
     document.getElementById('sH').textContent = s.h + '%';
     document.getElementById('sT').textContent = s.t + '%';
     document.getElementById('sO').textContent = s.o + '%';
@@ -148,7 +159,7 @@ async function load() {
 
     const tbody = document.getElementById('btBody');
     tbody.innerHTML = '';
-    bt.data.forEach(r => {
+    m.data.forEach(r => {
       const tr = document.createElement('tr');
       tr.className = r.ah ? 'tr-hit' : 'tr-miss';
       tr.innerHTML = `

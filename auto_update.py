@@ -17,6 +17,12 @@ BACKTEST_OUT = 'static/backtest.json'
 # 北京时间
 BJT = timezone(timedelta(hours=8))
 
+# 双模型配置
+MODELS = {
+    'V3': {'name': 'V3冲刺', 't2_span': 6, 't2_slide': 30, 'o2_span': 6, 'o2_slide': 50},
+    'V5': {'name': 'V5稳定', 't2_span': 99, 't2_slide': 0, 'o2_span': 5, 'o2_slide': 100},
+}
+
 # ============ 6层降级数据源 ============
 DATA_SOURCES = [
     {
@@ -157,7 +163,8 @@ def resolve(k1, k2, pb, ps, pg):
     return (k1+5)%10
 
 # V3配置: T2+O2频率切换
-def get_kill_v3(pb, ps, pg, freq_t, freq_o):
+def get_kill(pb, ps, pg, freq_t, freq_o, cfg):
+    """根据模型配置计算杀码"""
     from algorithms import kill_h1, kill_h2, kill_t1, kill_o1
     
     def t2_cur(b,s,g):
@@ -179,11 +186,11 @@ def get_kill_v3(pb, ps, pg, freq_t, freq_o):
     kh1=kill_h1(pb,ps,pg); kh2=resolve(kh1,kill_h2(pb,ps,pg),pb,ps,pg)
     
     kt1=kill_t1(pb,ps,pg)
-    kt2r=get_freq_hot(freq_t) if sp>=6 and freq_t and len(freq_t)>0 else t2_cur(pb,ps,pg)
+    kt2r=get_freq_hot(freq_t) if sp>=cfg['t2_span'] and freq_t and len(freq_t)>0 else t2_cur(pb,ps,pg)
     kt2=resolve(kt1,kt2r,pb,ps,pg)
     
     ko1=kill_o1(pb,ps,pg)
-    ko2r=get_freq_hot(freq_o) if sp>=5 and freq_o and len(freq_o)>0 else o2_cur(pb,ps,pg)
+    ko2r=get_freq_hot(freq_o) if sp>=cfg['o2_span'] and freq_o and len(freq_o)>0 else o2_cur(pb,ps,pg)
     ko2=resolve(ko1,ko2r,pb,ps,pg)
     
     return [kh1,kh2], [kt1,kt2], [ko1,ko2]
@@ -199,7 +206,7 @@ def get_freq_window(data, idx, slide):
 
 # ============ 回测+预测 ============
 def generate_outputs():
-    """生成predict.json和backtest.json"""
+    """为V3和V5双模型生成predict和backtest"""
     issues, h, t, o = [], [], [], []
     with open(CSV_PATH, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
@@ -214,71 +221,67 @@ def generate_outputs():
         print("  数据不足，跳过预测")
         return
     
-    # 最新一期的预测
     latest_b, latest_s, latest_g = h[-1], t[-1], o[-1]
-    freq_t = get_freq_window(t, N, 30)
-    freq_o = get_freq_window(o, N, 50)
-    kills_h, kills_t, kills_o = get_kill_v3(latest_b, latest_s, latest_g, freq_t, freq_o)
-    
     next_issue = str(int(issues[-1]) + 1)
-    if next_issue[4:] == '359':  # 跨年
+    if next_issue[4:] == '359':
         next_issue = str(int(issues[-1][:4]) + 1) + '001'
     
-    predict = {
-        'next_issue': next_issue,
-        'last_issue': issues[-1],
-        'last_draw': f"{latest_b}{latest_s}{latest_g}",
-        'kills': {'h': kills_h, 't': kills_t, 'o': kills_o},
-        'updated': datetime.now(BJT).strftime('%Y-%m-%d %H:%M'),
-    }
+    all_predict = {'models': {}, 'next_issue': next_issue, 
+                   'last_issue': issues[-1], 'last_draw': f'{latest_b}{latest_s}{latest_g}',
+                   'updated': datetime.now(BJT).strftime('%Y-%m-%d %H:%M')}
     
-    # 100期回测
-    backtest = []
-    nh = nt = no = na = 0
-    for i in range(max(1, N-100), N):
-        pb, ps, pg = h[i-1], t[i-1], o[i-1]
-        ft = get_freq_window(t, i-1, 30)
-        fo = get_freq_window(o, i-1, 50)
-        kh, kt, ko = get_kill_v3(pb, ps, pg, ft, fo)
+    for model_name, cfg in MODELS.items():
+        freq_t = get_freq_window(t, N, cfg['t2_slide']) if cfg['t2_slide']>0 else Counter()
+        freq_o = get_freq_window(o, N, cfg['o2_slide'])
+        kills_h, kills_t, kills_o = get_kill(latest_b, latest_s, latest_g, freq_t, freq_o, cfg)
         
-        h_hit = (kh[0]!=h[i] and kh[1]!=h[i])
-        t_hit = (kt[0]!=t[i] and kt[1]!=t[i])
-        o_hit = (ko[0]!=o[i] and ko[1]!=o[i])
-        all_hit = h_hit and t_hit and o_hit
+        # 100期回测
+        backtest = []
+        nh = nt = no = na = 0
+        win = min(100, N-1)
+        for i in range(max(1, N-win), N):
+            pb, ps, pg = h[i-1], t[i-1], o[i-1]
+            ft = get_freq_window(t, i-1, cfg['t2_slide']) if cfg['t2_slide']>0 else Counter()
+            fo = get_freq_window(o, i-1, cfg['o2_slide'])
+            kh, kt, ko = get_kill(pb, ps, pg, ft, fo, cfg)
+            
+            h_hit = (kh[0]!=h[i] and kh[1]!=h[i])
+            t_hit = (kt[0]!=t[i] and kt[1]!=t[i])
+            o_hit = (ko[0]!=o[i] and ko[1]!=o[i])
+            all_hit = h_hit and t_hit and o_hit
+            if h_hit: nh += 1
+            if t_hit: nt += 1
+            if o_hit: no += 1
+            if all_hit: na += 1
+            
+            backtest.append({
+                'issue': issues[i], 'draw': f"{h[i]}{t[i]}{o[i]}",
+                'kh': kh, 'kt': kt, 'ko': ko,
+                'hh': h_hit, 'th': t_hit, 'oh': o_hit, 'ah': all_hit,
+            })
         
-        if h_hit: nh += 1
-        if t_hit: nt += 1
-        if o_hit: no += 1
-        if all_hit: na += 1
+        backtest.reverse()
+        total = len(backtest)
         
-        backtest.append({
-            'issue': issues[i],
-            'draw': f"{h[i]}{t[i]}{o[i]}",
-            'kh': kh, 'kt': kt, 'ko': ko,
-            'hh': h_hit, 'th': t_hit, 'oh': o_hit, 'ah': all_hit,
-        })
-    
-    backtest.reverse()
-    total = len(backtest)
-    
-    backtest_data = {
-        'summary': {
-            'h': round(nh/total*100, 1) if total else 0,
-            't': round(nt/total*100, 1) if total else 0,
-            'o': round(no/total*100, 1) if total else 0,
-            'all': round(na/total*100, 1) if total else 0,
-            'total': total,
-        },
-        'data': backtest,
-    }
+        all_predict['models'][model_name] = {
+            'kills': {'h': kills_h, 't': kills_t, 'o': kills_o},
+            'summary': {
+                'h': round(nh/total*100,1) if total else 0,
+                't': round(nt/total*100,1) if total else 0,
+                'o': round(no/total*100,1) if total else 0,
+                'all': round(na/total*100,1) if total else 0,
+                'total': total,
+            },
+            'data': backtest,
+        }
+        
+        b3 = all_predict['models'][model_name]['summary']
+        print(f"  [{model_name}] {b3['total']}期: 百{b3['h']}% 十{b3['t']}% 个{b3['o']}% ★{b3['all']}%★")
     
     with open(PREDICT_OUT, 'w', encoding='utf-8') as f:
-        json.dump(predict, f, ensure_ascii=False)
-    with open(BACKTEST_OUT, 'w', encoding='utf-8') as f:
-        json.dump(backtest_data, f, ensure_ascii=False)
+        json.dump(all_predict, f, ensure_ascii=False)
     
-    print(f"  预测: {next_issue} → 百{kills_h} 十{kills_t} 个{kills_o}")
-    print(f"  回测: {total}期 全中{backtest_data['summary']['all']}%")
+    print(f"  预测期号: {next_issue}")
 
 # ============ 主流程 ============
 if __name__ == '__main__':
