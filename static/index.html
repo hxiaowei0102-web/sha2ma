@@ -140,9 +140,13 @@ function switchModel(m) {
 }
 
 async function load() {
+  const banner = document.getElementById('predIssue');
   try {
-    const p = await fetch('predict.json').then(r => r.json());
+    const resp = await fetch('predict.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const p = await resp.json();
     const m = p.models[currentModel];
+    if (!m) throw new Error('模型数据缺失: ' + currentModel);
     document.getElementById('predIssue').textContent = p.next_issue;
     document.getElementById('lastInfo').textContent = `上期 ${p.last_issue} = ${p.last_draw}`;
     document.getElementById('updateTime').textContent = `更新 ${p.updated} [${currentModel}]`;
@@ -174,7 +178,14 @@ async function load() {
         <td class="${r.ah?'badge-y':'badge-n'}">${r.ah?'✓全中':'✗'}</td>`;
       tbody.appendChild(tr);
     });
-  } catch(e) { console.error(e); }
+  } catch(e) {
+    console.error(e);
+    banner.textContent = '加载失败,点击重试';
+    banner.style.cursor = 'pointer';
+    banner.onclick = () => { banner.onclick = null; load(); };
+    const li = document.getElementById('lastInfo');
+    if (li) li.textContent = String(e.message || e);
+  }
 }
 load();
 </script>
