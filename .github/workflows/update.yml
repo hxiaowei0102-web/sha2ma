@@ -1,0 +1,70 @@
+name: 福彩3D杀2码 自动更新
+
+on:
+  schedule:
+    # 北京时间 22:00 / 23:30 / 01:00 = UTC 14:00 / 15:30 / 17:00
+    - cron: '0 14 * * *'
+    - cron: '30 15 * * *'
+    - cron: '0 17 * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 安装Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: 运行更新脚本(3重数据源)
+        run: python auto_update.py
+      
+      - name: 检查是否有新数据
+        id: check
+        run: |
+          if git diff --quiet data/fc3d-history.csv; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "无新数据，跳过提交"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "检测到新数据"
+          fi
+      
+      - name: 提交数据更新
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/fc3d-history.csv static/predict.json static/backtest.json
+          git commit -m "自动更新$(TZ='Asia/Shanghai' date +%m%d) [skip ci]" || true
+          git push
+      
+      - name: 准备部署文件
+        run: |
+          mkdir -p _site
+          cp static/index.html _site/
+          cp static/predict.json _site/
+          cp static/backtest.json _site/
+      
+      - name: 部署到GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          publish_branch: gh-pages
+          force_orphan: true

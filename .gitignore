@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+.workbuddy/
+.DS_Store
+*.pyo
+venv/
+.env
+
+# Test scripts
+*_test.py
+*_search.py
+*_boost.py
+*_push.py
+*_breakthrough.py
+*_attempts.py
+*_combo.py
+*_validate.py
+*_mile.py
+*_redesign.py
+*_config.py
+*_freq.py
