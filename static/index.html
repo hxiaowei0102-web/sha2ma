@@ -63,8 +63,8 @@ body { background: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, 'Seg
   <h1>福彩3D 百十个位各杀两码</h1>
   <div class="sub">云端全自动 · 6层数据源 · 双模型</div>
   <div style="display:flex;gap:6px;margin-top:8px">
-    <button id="btnV3" onclick="switchModel('V3')" style="flex:1;padding:5px;border-radius:16px;border:1.5px solid rgba(255,255,255,.5);background:rgba(255,255,255,.2);color:#fff;font-size:.75rem;font-weight:700;cursor:pointer" class="active">⚡ V3 冲刺</button>
-    <button id="btnV5" onclick="switchModel('V5')" style="flex:1;padding:5px;border-radius:16px;border:1.5px solid rgba(255,255,255,.5);background:transparent;color:rgba(255,255,255,.7);font-size:.75rem;cursor:pointer">🛡 V5 稳定</button>
+    <button id="btnV3" onclick="switchModel('V3')" style="flex:1;padding:5px;border-radius:16px;border:1.5px solid rgba(255,255,255,.5);background:rgba(255,255,255,.28);color:#fff;font-size:.75rem;font-weight:700;cursor:pointer;box-shadow:0 0 0 2px rgba(255,255,255,.35) inset">⚡ V3 冲刺</button>
+    <button id="btnV5" onclick="switchModel('V5')" style="flex:1;padding:5px;border-radius:16px;border:1.5px solid rgba(255,255,255,.5);background:transparent;color:rgba(255,255,255,.7);font-size:.75rem;font-weight:400;cursor:pointer">🛡 V5 稳定</button>
   </div>
 </div>
 
@@ -131,8 +131,11 @@ let currentModel = 'V3';
 
 function switchModel(m) {
   currentModel = m;
-  document.getElementById('btnV3').classList.toggle('active', m==='V3');
-  document.getElementById('btnV5').classList.toggle('active', m==='V5');
+  const b3 = document.getElementById('btnV3');
+  const b5 = document.getElementById('btnV5');
+  const on = (b) => { b.style.background = 'rgba(255,255,255,.28)'; b.style.color = '#fff'; b.style.fontWeight = '700'; b.style.boxShadow = '0 0 0 2px rgba(255,255,255,.35) inset'; };
+  const off = (b) => { b.style.background = 'transparent'; b.style.color = 'rgba(255,255,255,.7)'; b.style.fontWeight = '400'; b.style.boxShadow = 'none'; };
+  if (m === 'V3') { on(b3); off(b5); } else { on(b5); off(b3); }
   load();
 }
 
