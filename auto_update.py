@@ -294,7 +294,7 @@ if __name__ == '__main__':
         print(f"\n[3/4] 生成预测...")
         generate_outputs()
         print(f"\n[4/4] 完成 ✓")
-        return
+        sys.exit(0)
     
     # 提取数据
     src_name, draws = list(fetched.items())[0]
