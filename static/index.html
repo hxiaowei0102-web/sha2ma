@@ -142,11 +142,44 @@ function switchModel(m) {
 async function load() {
   const banner = document.getElementById('predIssue');
   try {
-    const resp = await fetch('predict.json?t=' + Date.now(), { cache: 'no-store' });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const p = await resp.json();
-    const m = p.models[currentModel];
-    if (!m) throw new Error('模型数据缺失: ' + currentModel);
+    // 优先尝试本地Flask API（双模型实时计算）
+    let p, m, bt;
+    try {
+      const [predResp, btResp] = await Promise.all([
+        fetch('/api/predict?model=' + currentModel, { cache: 'no-store' }),
+        fetch('/api/backtest?model=' + currentModel + '&window=100', { cache: 'no-store' })
+      ]);
+      if (!predResp.ok || !btResp.ok) throw new Error('API not available');
+      p = await predResp.json();
+      bt = await btResp.json();
+      if (p.error || bt.error) throw new Error(p.error || bt.error);
+      // 统一为云端格式
+      m = {
+        kills: { h: p.predictions.hundreds, t: p.predictions.tens, o: p.predictions.ones },
+        summary: {
+          h: bt.summary.hundreds_hit_rate,
+          t: bt.summary.tens_hit_rate,
+          o: bt.summary.ones_hit_rate,
+          all: bt.summary.all_hit_rate,
+          total: bt.summary.total_periods
+        },
+        data: bt.results.map(r => ({
+          issue: r.issue, draw: r.draw.join(''),
+          kh: r.kill_h, kt: r.kill_t, ko: r.kill_o,
+          hh: r.h_hit, th: r.t_hit, oh: r.o_hit, ah: r.all_hit
+        }))
+      };
+      p = { next_issue: p.next_issue, last_issue: p.last_issue,
+            last_draw: `${p.last_draw.hundreds}${p.last_draw.tens}${p.last_draw.ones}`,
+            updated: new Date().toLocaleString('zh-CN', {hour12:false}) };
+    } catch(apiErr) {
+      // fallback: 云端静态predict.json
+      const resp = await fetch('predict.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      p = await resp.json();
+      m = p.models && p.models[currentModel];
+      if (!m) throw new Error('模型数据缺失: ' + currentModel);
+    }
     document.getElementById('predIssue').textContent = p.next_issue;
     document.getElementById('lastInfo').textContent = `上期 ${p.last_issue} = ${p.last_draw}`;
     document.getElementById('updateTime').textContent = `更新 ${p.updated} [${currentModel}]`;
