@@ -155,43 +155,27 @@ def append_to_csv(new_draws):
                 print(f"  新增: {issue} = {b}{s}{g}")
     return added
 
-# ============ 算法(精简自backtest.py) ============
-def resolve(k1, k2, pb, ps, pg):
-    if k1 != k2: return k2
-    for fb in [(pb+ps+pg+5)%10, (pb*ps+pg)%10, (pb+ps*pg)%10]:
-        if fb != k1: return fb
-    return (k1+5)%10
+# ============ 算法(统一导入algorithms.py) ============
+from algorithms import kill_h1, kill_h2, kill_t1, kill_t2, kill_o1, kill_o2, resolve_collision
 
-# V3配置: T2+O2频率切换
+def resolve(k1, k2_raw, pb, ps, pg):
+    """resolve_collision的简化包装，返回resolved k2"""
+    _, k2 = resolve_collision(k1, k2_raw, pb, ps, pg)
+    return k2
+
 def get_kill(pb, ps, pg, freq_t, freq_o, cfg):
     """根据模型配置计算杀码"""
-    from algorithms import kill_h1, kill_h2, kill_t1, kill_o1
-    
-    def t2_cur(b,s,g):
-        d_bs=abs(b-s); d_sg=abs(s-g)
-        if d_bs<d_sg: return (b*s+g*g+1)%10
-        if d_bs>d_sg: return (s*g+b*b+1)%10
-        return (b+s+g+6)%10
-    
-    def o2_cur(b,s,g):
-        p=(b==g or s==g); sp=max(b,s,g)-min(b,s,g)
-        if b==s==g: return (b+5)%10
-        if p:
-            if sp>=7: return (b*s+g+7)%10
-            if sp>=5: return (b*s+g+5)%10
-            return (b+s+g+3)%10
-        return (b*g+s*s+2)%10
-    
     sp = max(pb,ps,pg)-min(pb,ps,pg)
-    kh1=kill_h1(pb,ps,pg); kh2=resolve(kh1,kill_h2(pb,ps,pg),pb,ps,pg)
+    kh1 = kill_h1(pb,ps,pg)
+    kh2 = resolve(kh1, kill_h2(pb,ps,pg), pb, ps, pg)
     
-    kt1=kill_t1(pb,ps,pg)
-    kt2r=get_freq_hot(freq_t) if sp>=cfg['t2_span'] and freq_t and len(freq_t)>0 else t2_cur(pb,ps,pg)
-    kt2=resolve(kt1,kt2r,pb,ps,pg)
+    kt1 = kill_t1(pb,ps,pg)
+    kt2r = get_freq_hot(freq_t) if sp>=cfg['t2_span'] and freq_t and len(freq_t)>0 else kill_t2(pb,ps,pg)
+    kt2 = resolve(kt1, kt2r, pb, ps, pg)
     
-    ko1=kill_o1(pb,ps,pg)
-    ko2r=get_freq_hot(freq_o) if sp>=cfg['o2_span'] and freq_o and len(freq_o)>0 else o2_cur(pb,ps,pg)
-    ko2=resolve(ko1,ko2r,pb,ps,pg)
+    ko1 = kill_o1(pb,ps,pg)
+    ko2r = get_freq_hot(freq_o) if sp>=cfg['o2_span'] and freq_o and len(freq_o)>0 else kill_o2(pb,ps,pg)
+    ko2 = resolve(ko1, ko2r, pb, ps, pg)
     
     return [kh1,kh2], [kt1,kt2], [ko1,ko2]
 
