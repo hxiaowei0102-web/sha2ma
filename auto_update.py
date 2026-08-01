@@ -7,12 +7,10 @@ from datetime import datetime, timezone, timedelta
 from collections import Counter
 from urllib.request import urlopen, Request
 from urllib.error import URLError
-import time
 
 # ============ 配置 ============
 CSV_PATH = 'data/fc3d-history.csv'
 PREDICT_OUT = 'static/predict.json'
-BACKTEST_OUT = 'static/backtest.json'
 
 # 北京时间
 BJT = timezone(timedelta(hours=8))
@@ -140,16 +138,24 @@ def load_existing_issues():
     return existing
 
 def append_to_csv(new_draws):
-    """追加新数据到CSV（去重）"""
+    """追加新数据到CSV（去重+校验）"""
     existing = load_existing_issues()
     added = 0
     with open(CSV_PATH, 'a', encoding='utf-8', newline='') as f:
         writer = csv.writer(f)
         for issue, b, s, g in new_draws:
-            if issue not in existing:
-                writer.writerow([issue, b, s, g])
-                added += 1
-                print(f"  新增: {issue} = {b}{s}{g}")
+            # 校验数据合法性
+            if issue in existing:
+                continue
+            if not (issue.startswith('20') and 7 <= len(issue) <= 8):
+                print(f"  ⚠ 跳过无效期号: {issue}")
+                continue
+            if not all(isinstance(x, int) and 0 <= x <= 9 for x in [b, s, g]):
+                print(f"  ⚠ 跳过无效号码: {issue}={b}{s}{g}")
+                continue
+            writer.writerow([issue, b, s, g])
+            added += 1
+            print(f"  新增: {issue} = {b}{s}{g}")
     return added
 
 # ============ 算法与回测（统一导入） ============
