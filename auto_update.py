@@ -218,7 +218,87 @@ def generate_outputs():
     with open(PREDICT_OUT, 'w', encoding='utf-8') as f:
         json.dump(all_predict, f, ensure_ascii=False)
     
+    # 追加监控历史（用于触发条件检测）
+    save_monitor_history(all_predict)
+    
     print(f"  预测期号: {all_predict['next_issue']}")
+
+
+def save_monitor_history(all_predict):
+    """保存100期全中率到监控历史文件"""
+    MONITOR_FILE = 'static/monitor_history.json'
+    s = all_predict['summary']
+    entry = {
+        'date': datetime.now(BJT).strftime('%Y-%m-%d'),
+        'time': datetime.now(BJT).strftime('%H:%M'),
+        'last_issue': all_predict['last_issue'],
+        'next_issue': all_predict['next_issue'],
+        'rate_100': s['all'],
+        'rate_h': s['h'],
+        'rate_t': s['t'],
+        'rate_o': s['o'],
+    }
+    
+    history = []
+    try:
+        if os.path.exists(MONITOR_FILE):
+            with open(MONITOR_FILE, 'r', encoding='utf-8') as f:
+                history = json.load(f)
+    except:
+        pass
+    
+    # 去重：同一天同一期号只保留最新
+    history = [h for h in history if h.get('next_issue') != entry['next_issue']]
+    history.append(entry)
+    
+    # 只保留最近180天
+    if len(history) > 180:
+        history = history[-180:]
+    
+    with open(MONITOR_FILE, 'w', encoding='utf-8') as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+    
+    # 检查触发条件
+    triggered, reason = check_trigger(history)
+    if triggered:
+        print(f"\n  ⚠️ 触发升级条件: {reason}")
+        # 写触发标记文件
+        with open('static/TRIGGER_ALERT.json', 'w', encoding='utf-8') as f:
+            json.dump({'triggered': True, 'reason': reason, 'date': entry['date'], 'time': entry['time']}, f, ensure_ascii=False)
+
+
+def check_trigger(history):
+    """检查两个触发条件"""
+    if len(history) < 2:
+        return False, ""
+    
+    latest = history[-1]
+    
+    # 条件1：滚动100期6杀全中率 < 70%
+    if latest['rate_100'] < 70:
+        return True, f"100期全中率 {latest['rate_100']}% < 70%"
+    
+    # 条件2：单月下滑 > 8pp
+    # 在历史中找到约30天前的记录
+    from datetime import datetime as dt
+    today = dt.strptime(latest['date'], '%Y-%m-%d')
+    thirty_ago = None
+    for h in reversed(history[:-1]):
+        hdate = dt.strptime(h['date'], '%Y-%m-%d')
+        days_diff = (today - hdate).days
+        if 25 <= days_diff <= 35:
+            thirty_ago = h
+            break
+    # 如果找不到恰好30天前的，用最早30天内的
+    if thirty_ago is None and len(history) >= 5:
+        thirty_ago = history[max(0, len(history)-6)]
+    
+    if thirty_ago:
+        drop = thirty_ago['rate_100'] - latest['rate_100']
+        if drop > 8:
+            return True, f"单月下滑 {drop:.1f}pp (从{thirty_ago['rate_100']}%→{latest['rate_100']}%, {thirty_ago['date']}→{latest['date']})"
+    
+    return False, ""
 
 # ============ 主流程 ============
 if __name__ == '__main__':
