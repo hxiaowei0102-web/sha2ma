@@ -258,7 +258,59 @@ def save_monitor_history(all_predict):
     with open(MONITOR_FILE, 'w', encoding='utf-8') as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
     
+    # 检查触发条件，写警报文件
+    check_and_alert(history, entry)
+    
     print(f"  监控历史: {len(history)}条, 当前{entry['rate_100']}%")
+
+
+def check_and_alert(history, entry):
+    """云端唯一触发检查：满足条件写TRIGGER_ALERT.json，正常则删除"""
+    ALERT_FILE = 'static/TRIGGER_ALERT.json'
+    
+    if len(history) < 2:
+        # 历史不足，清除旧警报
+        if os.path.exists(ALERT_FILE):
+            os.remove(ALERT_FILE)
+        return
+    
+    latest = history[-1]
+    triggered = False
+    reasons = []
+    
+    # 条件1：100期全中率 < 70%
+    if latest['rate_100'] < 70:
+        reasons.append(f"100期全中率{latest['rate_100']}% < 70%阈值")
+        triggered = True
+    
+    # 条件2：单月下滑 > 8pp
+    from datetime import datetime as dt
+    today = dt.strptime(latest['date'], '%Y-%m-%d')
+    for h in reversed(history[:-1]):
+        hdate = dt.strptime(h['date'], '%Y-%m-%d')
+        days_diff = (today - hdate).days
+        if 25 <= days_diff <= 35:
+            drop = h['rate_100'] - latest['rate_100']
+            if drop > 8:
+                reasons.append(f"单月下滑{drop:.1f}pp ({h['rate_100']}%→{latest['rate_100']}%, {h['date']}→{latest['date']})")
+                triggered = True
+            break
+    
+    if triggered:
+        alert = {
+            'triggered': True,
+            'reasons': reasons,
+            'date': entry['date'],
+            'time': entry['time'],
+            'rate_100': latest['rate_100'],
+        }
+        with open(ALERT_FILE, 'w', encoding='utf-8') as f:
+            json.dump(alert, f, ensure_ascii=False)
+        print(f"\n  ⚠️ 触发升级条件！{' / '.join(reasons)}")
+    else:
+        # 正常则清除旧警报
+        if os.path.exists(ALERT_FILE):
+            os.remove(ALERT_FILE)
 
 # ============ 主流程 ============
 if __name__ == '__main__':

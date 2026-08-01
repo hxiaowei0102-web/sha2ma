@@ -54,6 +54,8 @@ body { background: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, 'Seg
 .foot a { color: #999; }
 
 .loading { text-align: center; padding: 30px; color: #999; font-size: .8rem; }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.7} }
 </style>
 </head>
 <body>
@@ -61,8 +63,10 @@ body { background: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, 'Seg
 
 <div class="header">
   <h1>福彩3D 百十个位各杀两码</h1>
-  <div class="sub">云端全自动 · 6层数据源 · V3模型</div>
+  <div class="sub">云端全自动 · 6层数据源 · V4模型</div>
 </div>
+
+<div id="alertBox" style="display:none;background:#ff4444;color:#fff;padding:10px 14px;border-radius:12px;margin:0 12px 12px;font-size:.8rem;line-height:1.5;animation:pulse 2s infinite"></div>
 
 <div class="banner" id="banner">
   <div class="issue" id="predIssue">加载中...</div>
@@ -193,6 +197,8 @@ async function load() {
         tbody.appendChild(tr);
       });
     }
+    // 检查触发警报
+    checkAlert();
   } catch(e) {
     console.error(e);
     banner.textContent = '加载失败,点击重试';
@@ -201,6 +207,20 @@ async function load() {
     const li = document.getElementById('lastInfo');
     if (li) li.textContent = String(e.message || e);
   }
+}
+
+async function checkAlert() {
+  try {
+    const resp = await fetch('TRIGGER_ALERT.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!resp.ok) return;
+    const alert = await resp.json();
+    if (alert.triggered) {
+      const box = document.getElementById('alertBox');
+      box.style.display = 'block';
+      box.innerHTML = '⚠️ <b>触发升级条件！</b> ' + alert.reasons.join('；') +
+        '<br>当前100期全中率 <b>' + alert.rate_100 + '%</b>，建议重新穷举6个算法。';
+    }
+  } catch(e) {}
 }
 load();
 </script>
