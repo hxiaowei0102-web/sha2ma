@@ -12,6 +12,8 @@ MODEL_CONFIG = {
     't2_freq': True, 't2_span': 6, 't2_slide': 30,
     'o2_span': 6, 'o2_slide': 50,
 }
+# V4 (2026-08-01): H2=|b-g|+|s-g|+6, T2=s-mid+5, O2=3b+s+g+3
+# 穷举4190条公式池发现，100期77% (vs V3=71%)
 
 
 def get_kills_enhanced(b, s, g, freq_t=None, freq_o=None):
