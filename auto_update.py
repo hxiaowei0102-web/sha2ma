@@ -159,11 +159,11 @@ def append_to_csv(new_draws):
     return added
 
 # ============ 算法与回测（统一导入） ============
-from backtest import run_backtest, predict_next, MODEL_CONFIGS
+from backtest import run_backtest, predict_next, MODEL_CONFIG
 
 # ============ 回测+预测 ============
 def generate_outputs():
-    """为V3和V5双模型生成predict和backtest — 直接复用backtest.py"""
+    """生成V3预测和100期回测 — 直接复用backtest.py"""
     import csv
     issues = []
     with open(CSV_PATH, 'r', encoding='utf-8') as f:
@@ -176,47 +176,44 @@ def generate_outputs():
         print("  数据不足，跳过预测")
         return
     
-    # 用backtest.py的predict_next获取最新预测
-    first_model = list(MODEL_CONFIGS.keys())[0]
-    pred = predict_next(CSV_PATH, first_model)
+    # 预测
+    pred = predict_next(CSV_PATH)
     latest = pred['last_draw']
     
-    all_predict = {'models': {}, 'next_issue': pred['next_issue'],
-                   'last_issue': pred['last_issue'],
-                   'last_draw': f"{latest['hundreds']}{latest['tens']}{latest['ones']}",
-                   'updated': datetime.now(BJT).strftime('%Y-%m-%d %H:%M')}
+    all_predict = {
+        'next_issue': pred['next_issue'],
+        'last_issue': pred['last_issue'],
+        'last_draw': f"{latest['hundreds']}{latest['tens']}{latest['ones']}",
+        'updated': datetime.now(BJT).strftime('%Y-%m-%d %H:%M'),
+    }
     
-    for model_name in MODEL_CONFIGS:
-        # 预测
-        p = predict_next(CSV_PATH, model_name)
-        # 100期回测
-        bt = run_backtest(CSV_PATH, n_periods=100, model=model_name)
-        s = bt['summary']
-        
-        # 转换为云端格式
-        backtest_data = []
-        for r in bt['results']:
-            backtest_data.append({
-                'issue': r['issue'], 'draw': ''.join(str(d) for d in r['draw']),
-                'kh': r['kill_h'], 'kt': r['kill_t'], 'ko': r['kill_o'],
-                'hh': r['h_hit'], 'th': r['t_hit'], 'oh': r['o_hit'], 'ah': r['all_hit'],
-            })
-        
-        all_predict['models'][model_name] = {
-            'kills': {'h': p['predictions']['hundreds'],
-                      't': p['predictions']['tens'],
-                      'o': p['predictions']['ones']},
-            'summary': {
-                'h': s['hundreds_hit_rate'],
-                't': s['tens_hit_rate'],
-                'o': s['ones_hit_rate'],
-                'all': s['all_hit_rate'],
-                'total': s['total_periods'],
-            },
-            'data': backtest_data,
-        }
-        
-        print(f"  [{model_name}] {s['total_periods']}期: 百{s['hundreds_hit_rate']}% 十{s['tens_hit_rate']}% 个{s['ones_hit_rate']}% ★{s['all_hit_rate']}%★")
+    # 100期回测
+    bt = run_backtest(CSV_PATH, n_periods=100)
+    s = bt['summary']
+    
+    backtest_data = []
+    for r in bt['results']:
+        backtest_data.append({
+            'issue': r['issue'], 'draw': ''.join(str(d) for d in r['draw']),
+            'kh': r['kill_h'], 'kt': r['kill_t'], 'ko': r['kill_o'],
+            'hh': r['h_hit'], 'th': r['t_hit'], 'oh': r['o_hit'], 'ah': r['all_hit'],
+        })
+    
+    all_predict['kills'] = {
+        'h': pred['predictions']['hundreds'],
+        't': pred['predictions']['tens'],
+        'o': pred['predictions']['ones'],
+    }
+    all_predict['summary'] = {
+        'h': s['hundreds_hit_rate'],
+        't': s['tens_hit_rate'],
+        'o': s['ones_hit_rate'],
+        'all': s['all_hit_rate'],
+        'total': s['total_periods'],
+    }
+    all_predict['data'] = backtest_data
+    
+    print(f"  V3 {s['total_periods']}期: 百{s['hundreds_hit_rate']}% 十{s['tens_hit_rate']}% 个{s['ones_hit_rate']}% ★{s['all_hit_rate']}%★")
     
     with open(PREDICT_OUT, 'w', encoding='utf-8') as f:
         json.dump(all_predict, f, ensure_ascii=False)

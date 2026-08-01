@@ -1,5 +1,5 @@
 """
-福彩3D 百十个位各杀两码 — 回测引擎 (双模型支持)
+福彩3D 百十个位各杀两码 — 回测引擎
 严格滚动窗口验证：第i期预测仅用第i-1期数据
 """
 
@@ -8,34 +8,19 @@ from collections import Counter
 from algorithms import get_all_kills, resolve_collision, kill_h1, kill_h2, kill_t1, kill_t2, kill_o1, kill_o2
 
 # ============ 模型配置 ============
-MODEL_CONFIGS = {
-    'V3': {
-        'name': 'V3 激进冲刺型',
-        'desc': 'T2+O2频率,span≥6,slide=30/50',
-        'tag': '100期73%',
-        'o2_span': 6, 'o2_slide': 50,
-        't2_freq': True, 't2_slide': 30,
-    },
-    'V5': {
-        'name': 'V5 长期稳定型',
-        'desc': '仅O2频率,span≥5,slide=100',
-        'tag': '1000期54%',
-        'o2_span': 5, 'o2_slide': 100,
-        't2_freq': False, 't2_slide': 0,
-    },
+MODEL_CONFIG = {
+    't2_freq': True, 't2_span': 6, 't2_slide': 30,
+    'o2_span': 6, 'o2_slide': 50,
 }
 
-CURRENT_MODEL = 'V3'  # 默认V3
 
-
-def get_kills_enhanced(b, s, g, model='V3', freq_t=None, freq_o=None):
-    """增强版杀码：根据模型配置决定频率切换策略"""
+def get_kills_enhanced(b, s, g, freq_t=None, freq_o=None):
+    """增强版杀码：频率切换策略"""
     kills = get_all_kills(b, s, g)
-    cfg = MODEL_CONFIGS.get(model, MODEL_CONFIGS['V3'])
     span = max(b, s, g) - min(b, s, g)
     
     # 十位T2频率
-    if cfg['t2_freq'] and span >= cfg.get('t2_span', 6) and freq_t is not None and len(freq_t) > 0:
+    if freq_t is not None and len(freq_t) > 0 and span >= MODEL_CONFIG['t2_span']:
         hot_t = freq_t.most_common(1)[0][0]
         kt1 = kills['tens'][0]
         kt2 = hot_t
@@ -44,7 +29,7 @@ def get_kills_enhanced(b, s, g, model='V3', freq_t=None, freq_o=None):
         kills['tens'] = [kt1, kt2]
     
     # 个位O2频率
-    if span >= cfg['o2_span'] and freq_o is not None and len(freq_o) > 0:
+    if freq_o is not None and len(freq_o) > 0 and span >= MODEL_CONFIG['o2_span']:
         hot_o = freq_o.most_common(1)[0][0]
         ko1 = kills['ones'][0]
         ko2 = hot_o
@@ -86,21 +71,19 @@ def load_data(csv_path):
     return issues, hundreds, tens, ones
 
 
-def run_backtest(csv_path, n_periods=100, full=False, model='V3'):
+def run_backtest(csv_path, n_periods=100, full=False):
     """
     滚动窗口回测
     Args:
         csv_path: CSV文件路径
         n_periods: 回测期数（full=True时忽略）
         full: True=全量回测，False=n_periods期回测
-        model: 'V3' 或 'V5'
     """
     issues, hundreds, tens, ones = load_data(csv_path)
     N = len(issues)
-    cfg = MODEL_CONFIGS.get(model, MODEL_CONFIGS['V3'])
 
     if full:
-        start_idx = 1  # 从第2期开始（第1期需要第0期做输入，但第0期是第1期之前的数据）
+        start_idx = 1
         window_desc = f"全量{N-1}期"
     else:
         start_idx = max(1, N - n_periods)
@@ -108,14 +91,12 @@ def run_backtest(csv_path, n_periods=100, full=False, model='V3'):
 
     results = []
     for i in range(start_idx, N):
-        # 第i期预测：仅用第i-1期数据
         prev_b, prev_s, prev_g = hundreds[i - 1], tens[i - 1], ones[i - 1]
         actual_h, actual_t, actual_o = hundreds[i], tens[i], ones[i]
 
-        # 计算频率窗口(根据模型配置)
-        freq_t = get_freq_window(tens, i - 1, cfg['t2_slide']) if cfg['t2_freq'] else None
-        freq_o = get_freq_window(ones, i - 1, cfg['o2_slide'])
-        kills = get_kills_enhanced(prev_b, prev_s, prev_g, model, freq_t, freq_o)
+        freq_t = get_freq_window(tens, i - 1, MODEL_CONFIG['t2_slide'])
+        freq_o = get_freq_window(ones, i - 1, MODEL_CONFIG['o2_slide'])
+        kills = get_kills_enhanced(prev_b, prev_s, prev_g, freq_t, freq_o)
 
         kill_h1, kill_h2 = kills['hundreds']
         kill_t1, kill_t2 = kills['tens']
@@ -184,23 +165,21 @@ def get_next_issue(latest_issue):
     return f"{year}{seq:03d}"
 
 
-def predict_next(csv_path, model='V3'):
+def predict_next(csv_path):
     """预测下期杀码"""
     issues, hundreds, tens, ones = load_data(csv_path)
     N = len(issues)
     
     if N == 0:
         raise ValueError("数据集为空，无法预测")
-    
-    cfg = MODEL_CONFIGS.get(model, MODEL_CONFIGS['V3'])
 
     latest_issue = issues[-1]
     latest_b, latest_s, latest_g = hundreds[-1], tens[-1], ones[-1]
     next_issue = get_next_issue(latest_issue)
     
-    freq_t = get_freq_window(tens, N, cfg['t2_slide']) if cfg['t2_freq'] else None
-    freq_o = get_freq_window(ones, N, cfg['o2_slide'])
-    kills = get_kills_enhanced(latest_b, latest_s, latest_g, model, freq_t, freq_o)
+    freq_t = get_freq_window(tens, N, MODEL_CONFIG['t2_slide'])
+    freq_o = get_freq_window(ones, N, MODEL_CONFIG['o2_slide'])
+    kills = get_kills_enhanced(latest_b, latest_s, latest_g, freq_t, freq_o)
 
     return {
         'next_issue': next_issue,
