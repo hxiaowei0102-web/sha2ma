@@ -30,7 +30,7 @@ DATA_SOURCES = [
     {
         'name': 'huiniao',
         'type': 'json',
-        'url': 'http://api.huiniao.top/interface/home/lotteryHistory?type=fcsd&page=1&limit=5',
+        'url': 'https://api.huiniao.top/interface/home/lotteryHistory?type=fcsd&page=1&limit=5',
         'parser': lambda data: [
             (item['code'], int(item['one']), int(item['two']), int(item['three']),
              item.get('next_code'))
@@ -109,7 +109,10 @@ def fetch_latest():
                     draws = []
                     pattern = re.findall(r'(20\d{5})\D*?(\d)\D+?(\d)\D+?(\d)', raw)
                     for issue, b, s, g in pattern:
-                        draws.append((issue, int(b), int(s), int(g), None))
+                        # 2026-08-03 风险排除：zhcw页面是JS渲染壳，正则可能抓到导航里的历史期号
+                        # (实测抓到2022992)。期号须在近2年内才有效，防历史数据冒充最新。
+                        if 2024 <= int(issue[:4]) <= 2030:
+                            draws.append((issue, int(b), int(s), int(g), None))
                 else:
                     draws = []
 

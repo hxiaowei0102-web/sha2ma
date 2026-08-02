@@ -19,3 +19,25 @@ venv/
 *_redesign.py
 *_config.py
 *_freq.py
+*_crossval.py
+*_analysis.py
+*_contrast.py
+*_dynamic.py
+*_pool.py
+*_full.py
+*_report.py
+*_eval.py
+*_patch.py
+*_stability.py
+*_independence.py
+*_period.py
+*_signal.py
+*_cv.py
+*_adaptive*.py
+*_backup*.py
+
+# 审计/搜索中间产物
+audit_verify.py
+kill1_search_results.json
+*.bak
+*.orig

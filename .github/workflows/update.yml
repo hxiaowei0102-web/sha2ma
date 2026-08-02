@@ -37,12 +37,14 @@ jobs:
       - name: 检查是否有新数据
         id: check
         run: |
-          if git diff --quiet data/fc3d-history.csv; then
+          # 修复(2026-08-03 风险排除)：predict.json可能单独变更(无新开奖但回测率变化)，
+          # 只diff CSV会误判"无变化"跳过提交，但部署步骤仍会用旧predict覆盖gh-pages
+          if git diff --quiet data/fc3d-history.csv && git diff --quiet static/predict.json && git diff --quiet static/monitor_history.json; then
             echo "changed=false" >> $GITHUB_OUTPUT
             echo "无新数据，跳过提交"
           else
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "检测到新数据"
+            echo "检测到变化(CSV或预测或监控历史)"
           fi
       
       - name: 提交更新(含触发警报)

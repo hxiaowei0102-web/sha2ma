@@ -112,8 +112,10 @@ def run_backtest(csv_path, n_periods=100, full=False):
         prev_b, prev_s, prev_g = hundreds[i - 1], tens[i - 1], ones[i - 1]
         actual_h, actual_t, actual_o = hundreds[i], tens[i], ones[i]
 
-        freq_t = get_freq_window(tens, i - 1, MODEL_CONFIG['t2_slide'])
-        freq_o = get_freq_window(ones, i - 1, MODEL_CONFIG['o2_slide'])
+        # 2026-08-03 风险排除修复：窗口必须含上期(i-1)，与predict_next口径一致
+        # 原传i-1漏掉上期，导致回测展示(77%)虚高于真实预测水平(75%)
+        freq_t = get_freq_window(tens, i, MODEL_CONFIG['t2_slide'])
+        freq_o = get_freq_window(ones, i, MODEL_CONFIG['o2_slide'])
         kills = get_kills_enhanced(prev_b, prev_s, prev_g, freq_t, freq_o)
 
         kill_h1, kill_h2 = kills['hundreds']
