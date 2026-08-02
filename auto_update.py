@@ -18,24 +18,18 @@ BJT = timezone(timedelta(hours=8))
 # 双模型配置（统一从backtest.py导入）
 # MODEL_CONFIGS 在 backtest.py 中定义
 
-# ============ 6层降级数据源 ============
+# ============ 数据源（2026-08-03 精简：实测仅灰鸟存活） ============
+# 已移除死源(实测确认)：apihz(404)、8200(DNS失效)、55128(拒连)、cjcp(403)
+# 策略：灰鸟API为主，中彩网HTML为兜底。每个源都做期号合理性校验。
 DATA_SOURCES = [
     {
         'name': 'huiniao',
         'type': 'json',
         'url': 'http://api.huiniao.top/interface/home/lotteryHistory?type=fcsd&page=1&limit=5',
         'parser': lambda data: [
-            (item['code'], int(item['one']), int(item['two']), int(item['three']))
+            (item['code'], int(item['one']), int(item['two']), int(item['three']),
+             item.get('next_code'))
             for item in data['data']['data']['list']
-        ]
-    },
-    {
-        'name': 'apihz',
-        'type': 'json',
-        'url': 'https://api.apihz.cn/api/kaijiang/fc3d/list.php',
-        'parser': lambda data: [
-            (item['qihao'], int(item['haoma'][0]), int(item['haoma'][1]), int(item['haoma'][2]))
-            for item in data.get('data', [])
         ]
     },
     {
@@ -44,84 +38,80 @@ DATA_SOURCES = [
         'url': 'https://www.zhcw.com/kjxx/fc3d/',
         'parser': None  # HTML解析
     },
-    {
-        'name': '8200',
-        'type': 'json',
-        'url': 'https://api.8200.cn/hall/fc3d/getFc3dLotteryList',
-        'parser': lambda data: [
-            (item['lotteryDrawNum'], int(item['lotteryDrawResult'][0]), 
-             int(item['lotteryDrawResult'][1]), int(item['lotteryDrawResult'][2]))
-            for item in data.get('data', data.get('result', []))
-        ]
-    },
-    {
-        'name': '55128',
-        'type': 'html',
-        'url': 'https://www.55128.cn/kjh/fcsd-history-61.htm',
-        'parser': None
-    },
-    {
-        'name': 'cjcp',
-        'type': 'html',
-        'url': 'https://www.cjcp.com.cn/kaijiang/fc3d/',
-        'parser': None
-    },
 ]
 
 # ============ 数据抓取 ============
 def fetch_latest():
-    """6层降级：依次尝试，首个成功即返回，不继续"""
+    """多源降级：依次尝试，首个返回'新数据'即止
+
+    2026-08-03 P2修复：增加期号合理性校验。
+    若数据源最新期号 <= 本地CSV最新期号 → 判定为缓存/旧数据，跳过该源。
+    返回格式: {'name': [(issue, b, s, g, next_code), ...]}
+    """
+    local_rows, _ = load_existing_rows()
+    local_last = max(local_rows.keys(), key=int) if local_rows else None
+    if local_last:
+        print(f"  本地最新期号: {local_last}")
+
     for src in DATA_SOURCES:
         try:
             req = Request(src['url'], headers={
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             })
-            ctx = __import__('ssl')._create_unverified_context() if '8200' in src['url'] or '55128' in src['url'] else None
-            with urlopen(req, timeout=15, context=ctx) as resp:
+            ctx = __import__('ssl')._create_unverified_context()
+            with urlopen(req, timeout=12, context=ctx) as resp:
                 raw = resp.read().decode('utf-8', errors='ignore')
-                data = json.loads(raw)
-                
+
                 if src['type'] == 'json' and src['parser']:
+                    data = json.loads(raw)
                     draws = src['parser'](data)
                 elif src['type'] == 'html':
-                    # HTML解析: 从页面提取期号和号码
                     import re
                     draws = []
-                    # 匹配期号-号码模式: 2026200 或 2026200期
                     pattern = re.findall(r'(20\d{5})\D*?(\d)\D+?(\d)\D+?(\d)', raw)
                     for issue, b, s, g in pattern:
-                        draws.append((issue, int(b), int(s), int(g)))
+                        draws.append((issue, int(b), int(s), int(g), None))
                 else:
                     draws = []
-                
-                if draws:
-                    print(f"  [{src['name']}] ✓ 获取{len(draws)}条, 最新{draws[0]}")
-                    return {src['name']: draws}  # 首个成功即返回
-                else:
+
+                if not draws:
                     print(f"  [{src['name']}] 无数据, 尝试下一个...")
+                    continue
+
+                # P2: 期号合理性校验 — 最新期号必须大于本地，否则判定缓存/旧数据
+                src_latest = max(int(d[0]) for d in draws)
+                if local_last and src_latest <= int(local_last):
+                    print(f"  [{src['name']}] ⏭️ 期号{src_latest}<=本地{local_last}, 判定缓存/旧数据, 跳过")
+                    continue
+
+                print(f"  [{src['name']}] ✓ 获取{len(draws)}条, 最新{draws[0][0]}")
+                return {src['name']: draws}
         except Exception as e:
             print(f"  [{src['name']}] ✗ {str(e)[:60]}")
-    
-    print(f"  ❌ 所有6个数据源均失败")
+
+    print(f"  ❌ 所有数据源均失败或无新数据")
     return {}
 
 def merge_results(all_results):
     """多源合并：至少1源确认即可(2+源共识标记为确认)"""
     issue_map = {}
+    next_codes = {}
     for src_name, draws in all_results.items():
-        for issue, b, s, g in draws:
+        for item in draws:
+            issue = item[0]
+            b, s, g = item[1], item[2], item[3]
+            if len(item) > 4 and item[4]:
+                next_codes[issue] = item[4]
             if issue not in issue_map:
                 issue_map[issue] = Counter()
             issue_map[issue][(b, s, g)] += 1
-    
+
     confirmed = []
     for issue in sorted(issue_map.keys()):
         counter = issue_map[issue]
         nums, count = counter.most_common(1)[0]
-        # 至少1源确认即采纳
-        confirmed.append((issue, nums[0], nums[1], nums[2]))
-    
-    confirmed.sort()
+        confirmed.append((issue, nums[0], nums[1], nums[2], next_codes.get(issue)))
+
     return confirmed
 
 # ============ CSV操作 ============
@@ -165,7 +155,9 @@ def append_to_csv(new_draws):
         print(f"  ⚠ 检测到CSV历史乱序，将重写排序修复")
 
     added = 0
-    for issue, b, s, g in new_draws:
+    for item in new_draws:
+        issue = item[0]
+        b, s, g = item[1], item[2], item[3]
         # 校验数据合法性
         if not (isinstance(issue, str) and issue.startswith('20') and 7 <= len(issue) <= 8):
             print(f"  ⚠ 跳过无效期号: {issue}")
@@ -199,8 +191,12 @@ def append_to_csv(new_draws):
 from backtest import run_backtest, predict_next, MODEL_CONFIG
 
 # ============ 回测+预测 ============
-def generate_outputs():
-    """生成V3预测和100期回测 — 直接复用backtest.py"""
+def generate_outputs(next_code=None):
+    """生成V4预测和100期回测 — 直接复用backtest.py
+
+    Args:
+        next_code: 数据源提供的下期期号（跨年安全），None则本地兜底
+    """
     import csv
     issues = []
     with open(CSV_PATH, 'r', encoding='utf-8') as f:
@@ -214,7 +210,7 @@ def generate_outputs():
         return
     
     # 预测
-    pred = predict_next(CSV_PATH)
+    pred = predict_next(CSV_PATH, next_code=next_code)
     latest = pred['last_draw']
     
     all_predict = {
@@ -369,20 +365,28 @@ if __name__ == '__main__':
     print(f"=== FC3D 杀2码 自动更新 ===")
     print(f"  时间(北京): {datetime.now(BJT).strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # 1. 抓取数据(6层降级)
-    print(f"\n[1/4] 6层降级抓取...")
+    # 1. 抓取数据(多源降级+期号校验)
+    print(f"\n[1/4] 多源降级抓取...")
     fetched = fetch_latest()
     if not fetched:
-        print("  所有源失败, 仅生成预测不更新CSV")
-        # 仍然生成预测
+        print("  所有源失败或无新数据, 仅生成预测不更新CSV")
+        # 仍然生成预测（无新数据时next_code=None本地兜底）
         print(f"\n[3/4] 生成预测...")
         generate_outputs()
         print(f"\n[4/4] 完成 ✓")
         sys.exit(0)
     
-    # 提取数据
+    # 提取数据（5元组: issue,b,s,g,next_code）
     src_name, draws = list(fetched.items())[0]
     print(f"  使用数据源: {src_name}, {len(draws)}条")
+    # 取最新期号对应的next_code（灰鸟API跨年安全；取最新而非第一条，防乱序）
+    next_code = None
+    if draws:
+        latest_draw = max(draws, key=lambda d: int(d[0]))
+        if len(latest_draw) > 4 and latest_draw[4]:
+            next_code = latest_draw[4]
+    if next_code:
+        print(f"  下期期号(数据源): {next_code}")
     
     # 2. 追加CSV
     print(f"\n[2/4] 更新CSV...")
@@ -391,6 +395,6 @@ if __name__ == '__main__':
     
     # 3. 生成预测(无论有无新数据都执行)
     print(f"\n[3/4] 生成预测...")
-    generate_outputs()
+    generate_outputs(next_code=next_code)
     
     print(f"\n[4/4] 完成 ✓")

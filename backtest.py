@@ -183,8 +183,14 @@ def get_next_issue(latest_issue):
     return f"{year}{seq:03d}"
 
 
-def predict_next(csv_path):
-    """预测下期杀码"""
+def predict_next(csv_path, next_code=None):
+    """预测下期杀码
+
+    Args:
+        csv_path: CSV路径
+        next_code: 数据源提供的下期期号（如灰鸟API next_code，天然跨年安全），
+                   为None时用 get_next_issue 兜底
+    """
     issues, hundreds, tens, ones = load_data(csv_path)
     N = len(issues)
     
@@ -193,7 +199,11 @@ def predict_next(csv_path):
 
     latest_issue = issues[-1]
     latest_b, latest_s, latest_g = hundreds[-1], tens[-1], ones[-1]
-    next_issue = get_next_issue(latest_issue)
+    # P0修复：优先使用数据源next_code（跨年安全），否则本地计算兜底
+    if next_code and len(str(next_code)) >= 7:
+        next_issue = str(next_code)
+    else:
+        next_issue = get_next_issue(latest_issue)
     
     freq_t = get_freq_window(tens, N, MODEL_CONFIG['t2_slide'])
     freq_o = get_freq_window(ones, N, MODEL_CONFIG['o2_slide'])
