@@ -18,11 +18,12 @@ BJT = timezone(timedelta(hours=8))
 # 双模型配置（统一从backtest.py导入）
 # MODEL_CONFIGS 在 backtest.py 中定义
 
-# ============ 数据源（2026-08-03 实测审计：灰鸟+17500双主力） ============
-# 已移除死源(实测确认)：apihz(404)、8200(DNS失效)、55128(拒连)、cjcp(403)、cwl(403)、500com(404)
+# ============ 数据源（2026-08-03 实测审计：4源降级） ============
+# 已移除死源(实测确认)：apihz老路径(404)、8200(DNS失效)、55128(拒连)、cjcp(403)、cwl(403)、500com(404)
 # 已实测可用源：
 #   huiniao  - JSON API，唯一带next_code的源（跨年安全），主源
 #   17500    - 官方级全量TXT(2002至今8712期)，更新及时，强兜底（还能校验本地完整性）
+#   apihz    - 新路径 cn.apihz.cn + 公共key(88888888) 实测5/5稳定，JSON单期，无next_code
 #   zhcw     - 官方页面HTML，常返回缓存页(被期号校验拦截)，弱兜底
 # 每个源都做期号合理性校验（最新期号<=本地 → 判定缓存/旧数据跳过）
 DATA_SOURCES = [
@@ -43,6 +44,12 @@ DATA_SOURCES = [
         'parser': None  # 特殊解析：全量TXT取最新5条
     },
     {
+        'name': 'apihz',
+        'type': 'json',
+        'url': 'https://cn.apihz.cn/api/caipiao/fucai3d.php?id=88888888&key=88888888',
+        'parser': lambda data: _parse_apihz(data)
+    },
+    {
         'name': 'zhcw',
         'type': 'html',
         'url': 'https://www.zhcw.com/kjxx/fc3d/',
@@ -51,6 +58,18 @@ DATA_SOURCES = [
 ]
 
 # ============ 数据抓取 ============
+def _parse_apihz(data):
+    """apihz公共key解析：{"number":"9|7|8","qihao":"2026204","code":200}"""
+    if data.get('code') != 200:
+        return []
+    nums = str(data.get('number', '')).split('|')
+    if len(nums) != 3:
+        return []
+    try:
+        return [(data['qihao'], int(nums[0]), int(nums[1]), int(nums[2]), None)]
+    except (KeyError, ValueError):
+        return []
+
 def fetch_latest():
     """多源降级：依次尝试，首个返回'新数据'即止
 
