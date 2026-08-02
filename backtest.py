@@ -51,7 +51,12 @@ def get_freq_window(data, idx, slide):
 
 
 def load_data(csv_path):
-    """读取CSV，返回 (issues, hundreds, tens, ones) 四列表"""
+    """读取CSV，返回 (issues, hundreds, tens, ones) 四列表
+
+    校验期号严格升序（2026-08-03 修复）：
+    云端曾出现乱序行(2026204排在2026203前)导致回测顺序错乱+未来泄漏。
+    发现乱序时自动按数值排序修复并警告。
+    """
     issues, hundreds, tens, ones = [], [], [], []
     try:
         with open(csv_path, 'r', encoding='utf-8') as f:
@@ -70,6 +75,17 @@ def load_data(csv_path):
         raise FileNotFoundError(f"数据文件不存在: {csv_path}")
     except Exception as e:
         raise RuntimeError(f"数据加载失败: {e}")
+
+    # 校验严格升序
+    bad = sum(1 for i in range(len(issues) - 1) if issues[i] >= issues[i + 1])
+    if bad > 0:
+        print(f"  ⚠ [backtest] 检测到{len(issues)}期数据中{bad}处乱序/重复，自动按期号排序修复")
+        order = sorted(range(len(issues)), key=lambda i: int(issues[i]))
+        issues = [issues[i] for i in order]
+        hundreds = [hundreds[i] for i in order]
+        tens = [tens[i] for i in order]
+        ones = [ones[i] for i in order]
+
     return issues, hundreds, tens, ones
 
 

@@ -125,37 +125,74 @@ def merge_results(all_results):
     return confirmed
 
 # ============ CSV操作 ============
-def load_existing_issues():
-    """读取CSV中已有的期号"""
-    existing = []
+def load_existing_rows():
+    """读取CSV全部行 → {issue: (b,s,g)}，返回 (dict, 乱序检测标志)"""
+    rows = {}
+    out_of_order = False
+    prev = None
     try:
         with open(CSV_PATH, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                existing.append(row['issue'])
+                iss = row['issue']
+                try:
+                    b, s, g = int(row['hundreds']), int(row['tens']), int(row['ones'])
+                except (KeyError, ValueError):
+                    continue  # 跳过损坏行
+                rows[iss] = (b, s, g)
+                if prev is not None and iss < prev:
+                    out_of_order = True
+                prev = iss
     except FileNotFoundError:
         pass
-    return existing
+    return rows, out_of_order
+
+def load_existing_issues():
+    """读取CSV中已有的期号（兼容旧调用）"""
+    rows, _ = load_existing_rows()
+    return list(rows.keys())
 
 def append_to_csv(new_draws):
-    """追加新数据到CSV（去重+校验）"""
-    existing = load_existing_issues()
+    """追加新数据到CSV（去重+校验+强制按期号升序重写）
+
+    关键修复(2026-08-03)：原实现直接append，若CSV已存在乱序行
+    (如 2026204 排在 2026203 前)，回测会把后追加的期号当作相邻上期，
+    导致 ① 回测顺序错乱 ② 用未来开奖号预测 = 虚假命中。
+    现改为：读取全量 → 合并新数据 → 按期号排序 → 整体重写。
+    """
+    rows, was_out_of_order = load_existing_rows()
+    if was_out_of_order:
+        print(f"  ⚠ 检测到CSV历史乱序，将重写排序修复")
+
     added = 0
-    with open(CSV_PATH, 'a', encoding='utf-8', newline='') as f:
+    for issue, b, s, g in new_draws:
+        # 校验数据合法性
+        if not (isinstance(issue, str) and issue.startswith('20') and 7 <= len(issue) <= 8):
+            print(f"  ⚠ 跳过无效期号: {issue}")
+            continue
+        if not all(isinstance(x, int) and 0 <= x <= 9 for x in [b, s, g]):
+            print(f"  ⚠ 跳过无效号码: {issue}={b}{s}{g}")
+            continue
+        if issue in rows:
+            if rows[issue] != (b, s, g):
+                print(f"  ⚠ 期号{issue}已有数据且不一致: {rows[issue]} vs {(b,s,g)}，保留原值")
+            continue
+        rows[issue] = (b, s, g)
+        added += 1
+        print(f"  新增: {issue} = {b}{s}{g}")
+
+    if added == 0 and not was_out_of_order:
+        return 0
+
+    # 按期号升序整体重写（数字排序，保证 2026203 < 2026204）
+    with open(CSV_PATH, 'w', encoding='utf-8', newline='') as f:
         writer = csv.writer(f)
-        for issue, b, s, g in new_draws:
-            # 校验数据合法性
-            if issue in existing:
-                continue
-            if not (issue.startswith('20') and 7 <= len(issue) <= 8):
-                print(f"  ⚠ 跳过无效期号: {issue}")
-                continue
-            if not all(isinstance(x, int) and 0 <= x <= 9 for x in [b, s, g]):
-                print(f"  ⚠ 跳过无效号码: {issue}={b}{s}{g}")
-                continue
-            writer.writerow([issue, b, s, g])
-            added += 1
-            print(f"  新增: {issue} = {b}{s}{g}")
+        writer.writerow(['issue', 'hundreds', 'tens', 'ones'])
+        for iss in sorted(rows.keys()):
+            b, s, g = rows[iss]
+            writer.writerow([iss, b, s, g])
+    if was_out_of_order:
+        print(f"  ✓ CSV已重写排序，当前共{len(rows)}期")
     return added
 
 # ============ 算法与回测（统一导入） ============
