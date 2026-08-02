@@ -49,7 +49,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/fc3d-history.csv static/predict.json static/monitor_history.json static/TRIGGER_ALERT.json 2>/dev/null || true
+          # 修复(2026-08-03)：TRIGGER_ALERT.json 未跟踪，直接git add整文件会整体失败
+          # 改用 git add -A data/ static/，不存在的文件自动忽略，不再吞错误
+          git add -A data/ static/ || true
           git commit -m "自动更新$(TZ='Asia/Shanghai' date +%m%d) [skip ci]" || true
           git push
       
