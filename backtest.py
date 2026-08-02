@@ -172,12 +172,17 @@ def run_backtest(csv_path, n_periods=100, full=False):
 
 
 def get_next_issue(latest_issue):
-    """根据最新期号计算下期期号（处理跨年）"""
+    """根据最新期号计算下期期号（处理跨年）
+
+    2026-08-03 修复：原硬编码 seq>358 就跨年，但福彩3D部分年份有359期
+    （2003/2004/2008/2012/2016均359期），导致 2026359→2027001 年中误跨年。
+    现改为：当年最大期号以内正常+1；超过当年最大期号(358或359)才跨年。
+    """
     year = int(latest_issue[:4])
     seq = int(latest_issue[4:])
     seq += 1
-    # 福彩3D每年约358期
-    if seq > 358:
+    # 福彩3D每年最多359期（按历史年份实际最大期号）
+    if seq > 359:
         year += 1
         seq = 1
     return f"{year}{seq:03d}"
