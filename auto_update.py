@@ -18,9 +18,13 @@ BJT = timezone(timedelta(hours=8))
 # 双模型配置（统一从backtest.py导入）
 # MODEL_CONFIGS 在 backtest.py 中定义
 
-# ============ 数据源（2026-08-03 精简：实测仅灰鸟存活） ============
-# 已移除死源(实测确认)：apihz(404)、8200(DNS失效)、55128(拒连)、cjcp(403)
-# 策略：灰鸟API为主，中彩网HTML为兜底。每个源都做期号合理性校验。
+# ============ 数据源（2026-08-03 实测审计：灰鸟+17500双主力） ============
+# 已移除死源(实测确认)：apihz(404)、8200(DNS失效)、55128(拒连)、cjcp(403)、cwl(403)、500com(404)
+# 已实测可用源：
+#   huiniao  - JSON API，唯一带next_code的源（跨年安全），主源
+#   17500    - 官方级全量TXT(2002至今8712期)，更新及时，强兜底（还能校验本地完整性）
+#   zhcw     - 官方页面HTML，常返回缓存页(被期号校验拦截)，弱兜底
+# 每个源都做期号合理性校验（最新期号<=本地 → 判定缓存/旧数据跳过）
 DATA_SOURCES = [
     {
         'name': 'huiniao',
@@ -31,6 +35,12 @@ DATA_SOURCES = [
              item.get('next_code'))
             for item in data['data']['data']['list']
         ]
+    },
+    {
+        'name': '17500',
+        'type': 'txt17500',
+        'url': 'https://www.17500.cn/getData/3d.TXT',
+        'parser': None  # 特殊解析：全量TXT取最新5条
     },
     {
         'name': 'zhcw',
@@ -65,6 +75,16 @@ def fetch_latest():
                 if src['type'] == 'json' and src['parser']:
                     data = json.loads(raw)
                     draws = src['parser'](data)
+                elif src['type'] == 'txt17500':
+                    # 17500全量TXT: 每行 "期号 日期 百 十 个 ..."，取最新5条
+                    import re as _re
+                    draws = []
+                    lines = [l for l in raw.strip().split('\n') if l.strip()]
+                    for l in lines[-5:]:
+                        parts = l.split()
+                        if len(parts) >= 5 and _re.match(r'^20\d{5}$', parts[0]):
+                            draws.append((parts[0], int(parts[2]), int(parts[3]),
+                                          int(parts[4]), None))
                 elif src['type'] == 'html':
                     import re
                     draws = []
