@@ -31,7 +31,7 @@ jobs:
         with:
           python-version: '3.11'
       
-      - name: 运行更新脚本(6层降级数据源)
+      - name: 运行更新脚本(多源降级+期号校验)
         run: python auto_update.py || exit 1
       
       - name: 检查是否有新数据
