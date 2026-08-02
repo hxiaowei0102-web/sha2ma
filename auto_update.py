@@ -284,8 +284,10 @@ def check_and_alert(history, entry):
         triggered = True
     
     # 条件2：单月下滑 > 8pp
+    # 修复：向后找第一个 25~35 天前的记录；找不到则继续找更早的（容忍缺数据）
     from datetime import datetime as dt
     today = dt.strptime(latest['date'], '%Y-%m-%d')
+    matched = False
     for h in reversed(history[:-1]):
         hdate = dt.strptime(h['date'], '%Y-%m-%d')
         days_diff = (today - hdate).days
@@ -294,7 +296,20 @@ def check_and_alert(history, entry):
             if drop > 8:
                 reasons.append(f"单月下滑{drop:.1f}pp ({h['rate_100']}%→{latest['rate_100']}%, {h['date']}→{latest['date']})")
                 triggered = True
+            matched = True
             break
+        # 超过35天还没找到 → 继续向后找更早的（不break），最多再看10条
+    # 若全部记录都太旧(>60天)，也尝试用最近一条可比的
+    if not matched:
+        for h in reversed(history[:-1]):
+            hdate = dt.strptime(h['date'], '%Y-%m-%d')
+            days_diff = (today - hdate).days
+            if days_diff <= 60:
+                drop = h['rate_100'] - latest['rate_100']
+                if drop > 8:
+                    reasons.append(f"单月下滑{drop:.1f}pp ({h['rate_100']}%→{latest['rate_100']}%, {h['date']}→{latest['date']})")
+                    triggered = True
+                break
     
     if triggered:
         alert = {
