@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>福彩3D 百十个位各杀两码</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: #333; }
+.container { max-width: 480px; margin: 0 auto; padding: 10px; }
+
+.header { background: linear-gradient(135deg, #5b3cc4 0%, #7b5fe0 100%); color: #fff; padding: 14px 16px; border-radius: 10px; margin-bottom: 10px; }
+.header h1 { font-size: 1.1rem; }
+.header .sub { font-size: .72rem; opacity: .8; margin-top: 2px; }
+
+.banner { background: #fff8e1; border: 1.5px solid #ffc107; border-radius: 8px; padding: 12px; text-align: center; margin-bottom: 8px; }
+.banner .issue { font-size: 1.4rem; font-weight: 700; color: #e65100; }
+.banner .last { font-size: .75rem; color: #856404; margin-top: 2px; }
+.banner .time { font-size: .65rem; color: #999; }
+
+.kill-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+.kill-card { background: #fff; border-radius: 8px; padding: 10px 6px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.kill-card .pos-label { font-size: .7rem; color: #888; }
+.kill-card .nums { display: flex; justify-content: center; gap: 6px; margin: 4px 0; }
+.kill-card .num { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 700; background: #e8eaf6; color: #3f51b5; }
+
+.stats { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 4px; margin-bottom: 8px; }
+.stat { background: #fff; border-radius: 6px; padding: 8px 4px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+.stat .val { font-size: 1.2rem; font-weight: 700; }
+.stat .val.g { color: #2e7d32; }
+.stat .val.o { color: #e65100; }
+.stat .lbl { font-size: .65rem; color: #999; margin-top: 1px; }
+.stat-main { background: #e8f5e9; }
+.stat-main .val { font-size: 1.4rem; }
+
+.table-wrap { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.06); margin-bottom: 8px; }
+.table-wrap h3 { font-size: .85rem; padding: 8px 12px; border-bottom: 1px solid #eee; }
+.scroll { max-height: 400px; overflow: auto; -webkit-overflow-scrolling: touch; }
+.tbl { width: 100%; border-collapse: collapse; font-size: .72rem; }
+.tbl th { background: #fafafa; position: sticky; top: 0; padding: 6px 4px; font-size: .68rem; color: #666; white-space: nowrap; }
+.tbl td { padding: 5px 3px; text-align: center; border-bottom: 1px solid #f0f0f0; }
+.tr-hit { border-left: 3px solid #4caf50; }
+.tr-miss { border-left: 3px solid #f44336; }
+.badge-y { color: #2e7d32; font-weight: 700; }
+.badge-n { color: #c62828; font-weight: 700; }
+
+.info { background: #fff; border-radius: 8px; padding: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.06); margin-bottom: 8px; }
+.info h3 { font-size: .85rem; margin-bottom: 6px; }
+.algo-list { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.algo { font-size: .65rem; padding: 4px 6px; background: #f5f5f5; border-radius: 4px; }
+.algo b { color: #555; }
+
+.foot { text-align: center; font-size: .65rem; color: #bbb; padding: 10px 0; }
+.foot a { color: #999; }
+
+.loading { text-align: center; padding: 30px; color: #999; font-size: .8rem; }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.7} }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+  <h1>福彩3D 百十个位各杀两码</h1>
+  <div class="sub">云端全自动 · 6层数据源 · V4模型</div>
+</div>
+
+<div id="alertBox" style="display:none;background:#ff4444;color:#fff;padding:10px 14px;border-radius:12px;margin:0 12px 12px;font-size:.8rem;line-height:1.5;animation:pulse 2s infinite"></div>
+
+<div class="banner" id="banner">
+  <div class="issue" id="predIssue">加载中...</div>
+  <div class="last" id="lastInfo"></div>
+  <div class="time" id="updateTime"></div>
+</div>
+
+<div class="kill-grid">
+  <div class="kill-card">
+    <div class="pos-label">百位杀码</div>
+    <div class="nums"><span class="num" id="kh1">-</span><span class="num" id="kh2">-</span></div>
+  </div>
+  <div class="kill-card">
+    <div class="pos-label">十位杀码</div>
+    <div class="nums"><span class="num" id="kt1">-</span><span class="num" id="kt2">-</span></div>
+  </div>
+  <div class="kill-card">
+    <div class="pos-label">个位杀码</div>
+    <div class="nums"><span class="num" id="ko1">-</span><span class="num" id="ko2">-</span></div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="val g" id="sH">-</div><div class="lbl">百位</div></div>
+  <div class="stat"><div class="val o" id="sT">-</div><div class="lbl">十位</div></div>
+  <div class="stat"><div class="val o" id="sO">-</div><div class="lbl">个位</div></div>
+  <div class="stat stat-main"><div class="val g" id="sAll">-</div><div class="lbl">★全中</div></div>
+</div>
+
+<div class="table-wrap">
+  <h3>近100期回测 (全中=<span id="btTotal">-</span>) <span style="font-size:.65rem;color:#999;float:right">✓命中 ✗失误</span></h3>
+  <div class="scroll">
+    <table class="tbl">
+      <thead><tr><th>期号</th><th>号</th><th>百杀</th><th>十杀</th><th>个杀</th><th>百</th><th>十</th><th>个</th><th>全</th></tr></thead>
+      <tbody id="btBody"><tr><td colspan="9" class="loading">加载中...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="info">
+  <h3>6个算法</h3>
+  <div class="algo-list">
+    <div class="algo"><b>H1 百位</b> 奇偶空间法</div>
+    <div class="algo"><b>H2 百位</b> 奇偶反应型</div>
+    <div class="algo"><b>T1 十位</b> V8a和值跨度</div>
+    <div class="algo"><b>T2 十位</b> 平衡法+频率</div>
+    <div class="algo"><b>O1 个位</b> 形态学检测</div>
+    <div class="algo"><b>O2 个位</b> 对子感知+频率</div>
+  </div>
+</div>
+
+<div class="foot">
+  仅供研究 · 基线51.2%<br>
+  数据源: huiniao | 17500 | apihz | 中彩网<br>
+  <a href="https://github.com/hxiaowei0102-web/sha2ma">GitHub</a> 云端全自动
+</div>
+
+</div>
+
+<script>
+async function load() {
+  const banner = document.getElementById('predIssue');
+  try {
+    // 优先尝试本地Flask API（实时计算）
+    let p, m, bt;
+    try {
+      const [predResp, btResp] = await Promise.all([
+        fetch('/api/predict', { cache: 'no-store' }),
+        fetch('/api/backtest?window=100', { cache: 'no-store' })
+      ]);
+      if (!predResp.ok || !btResp.ok) throw new Error('API not available');
+      p = await predResp.json();
+      bt = await btResp.json();
+      if (p.error || bt.error) throw new Error(p.error || bt.error);
+      m = {
+        kills: { h: p.predictions.hundreds, t: p.predictions.tens, o: p.predictions.ones },
+        summary: {
+          h: bt.summary.hundreds_hit_rate, t: bt.summary.tens_hit_rate,
+          o: bt.summary.ones_hit_rate, all: bt.summary.all_hit_rate, total: bt.summary.total_periods
+        },
+        data: bt.results.map(r => ({
+          issue: r.issue, draw: r.draw.join(''),
+          kh: r.kill_h, kt: r.kill_t, ko: r.kill_o,
+          hh: r.h_hit, th: r.t_hit, oh: r.o_hit, ah: r.all_hit
+        }))
+      };
+      p = { next_issue: p.next_issue, last_issue: p.last_issue,
+            last_draw: `${p.last_draw.hundreds}${p.last_draw.tens}${p.last_draw.ones}`,
+            updated: new Date().toLocaleString('zh-CN', {hour12:false}) };
+    } catch(apiErr) {
+      // fallback: 云端静态predict.json（新格式，扁平结构）
+      const resp = await fetch('predict.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      p = await resp.json();
+      m = { kills: p.kills, summary: p.summary, data: p.data };
+      if (!m.kills) throw new Error('数据格式错误');
+    }
+    document.getElementById('predIssue').textContent = p.next_issue;
+    document.getElementById('lastInfo').textContent = `上期 ${p.last_issue} = ${p.last_draw}`;
+    document.getElementById('updateTime').textContent = `更新 ${p.updated}`;
+    document.getElementById('kh1').textContent = m.kills.h[0];
+    document.getElementById('kh2').textContent = m.kills.h[1];
+    document.getElementById('kt1').textContent = m.kills.t[0];
+    document.getElementById('kt2').textContent = m.kills.t[1];
+    document.getElementById('ko1').textContent = m.kills.o[0];
+    document.getElementById('ko2').textContent = m.kills.o[1];
+
+    const s = m.summary;
+    document.getElementById('sH').textContent = s.h + '%';
+    document.getElementById('sT').textContent = s.t + '%';
+    document.getElementById('sO').textContent = s.o + '%';
+    document.getElementById('sAll').textContent = s.all + '%';
+    document.getElementById('btTotal').textContent = s.total + '期 ' + s.all + '%';
+
+    const tbody = document.getElementById('btBody');
+    tbody.innerHTML = '';
+    if (m.data) {
+      m.data.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.className = r.ah ? 'tr-hit' : 'tr-miss';
+        tr.innerHTML = `
+          <td>${r.issue}</td><td><b>${r.draw}</b></td>
+          <td>${r.kh.join(',')}</td><td>${r.kt.join(',')}</td><td>${r.ko.join(',')}</td>
+          <td class="${r.hh?'badge-y':'badge-n'}">${r.hh?'✓':'✗'}</td>
+          <td class="${r.th?'badge-y':'badge-n'}">${r.th?'✓':'✗'}</td>
+          <td class="${r.oh?'badge-y':'badge-n'}">${r.oh?'✓':'✗'}</td>
+          <td class="${r.ah?'badge-y':'badge-n'}">${r.ah?'✓全中':'✗'}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+    // 检查触发警报
+    checkAlert();
+  } catch(e) {
+    console.error(e);
+    banner.textContent = '加载失败,点击重试';
+    banner.style.cursor = 'pointer';
+    banner.onclick = () => { banner.onclick = null; load(); };
+    const li = document.getElementById('lastInfo');
+    if (li) li.textContent = String(e.message || e);
+  }
+}
+
+async function checkAlert() {
+  try {
+    const resp = await fetch('TRIGGER_ALERT.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!resp.ok) return;
+    const alert = await resp.json();
+    if (alert.triggered) {
+      const box = document.getElementById('alertBox');
+      box.style.display = 'block';
+      box.innerHTML = '⚠️ <b>触发升级条件！</b> ' + alert.reasons.join('；') +
+        '<br>当前100期全中率 <b>' + alert.rate_100 + '%</b>，建议重新穷举6个算法。';
+    }
+  } catch(e) {}
+}
+load();
+</script>
+</body>
+</html>
